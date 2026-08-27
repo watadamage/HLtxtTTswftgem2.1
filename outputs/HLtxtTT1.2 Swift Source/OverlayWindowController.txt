@@ -1,0 +1,47 @@
+import AppKit
+import SwiftUI
+
+final class OverlayWindowController: NSWindowController, NSWindowDelegate {
+    init(model: OverlayModel) {
+        let frame = NSRect(x: 120, y: 120, width: 420, height: 560)
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.title = "HLtxtTT"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        // statusBar is above regular and floating application windows.  It remains below
+        // system alerts, which prevents the utility from obscuring security UI.
+        window.level = .statusBar
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        window.hidesOnDeactivate = false
+        window.minSize = NSSize(width: 360, height: 500)
+        window.setFrameAutosaveName("HLtxtTTOverlay")
+
+        model.attach(window: window)
+        window.contentView = NSHostingView(rootView: OverlayView(model: model))
+        super.init(window: window)
+        window.delegate = self
+        // Keep the standard traffic-light actions available even when the overlay is
+        // inactive and above another application.
+        window.standardWindowButton(.closeButton)?.isEnabled = true
+        window.standardWindowButton(.miniaturizeButton)?.isEnabled = true
+        shouldCascadeWindows = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        NSApp.terminate(nil)
+        return false
+    }
+}

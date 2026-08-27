@@ -1,0 +1,113 @@
+import SwiftUI
+
+struct OverlayView: View {
+    @ObservedObject var model: OverlayModel
+
+    private var colorScheme: ColorScheme? {
+        switch model.appearance { case .system: nil; case .light: .light; case .dark: .dark }
+    }
+
+    var body: some View {
+        ZStack {
+            WindowBackdrop(usesGlass: model.usesGlass)
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                input
+                settings
+                status
+                controls
+            }
+            .padding(18)
+        }
+        .frame(minWidth: 360, idealWidth: 420, minHeight: 500, idealHeight: 560)
+        .preferredColorScheme(colorScheme)
+    }
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("HLtxtTT").font(.system(size: 18, weight: .bold, design: .rounded))
+                Text("On-screen input utility").font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Picker("Appearance", selection: $model.appearance) {
+                ForEach(OverlayModel.AppearanceChoice.allCases) { Text($0.rawValue).tag($0) }
+            }.labelsHidden().frame(width: 106)
+        }
+    }
+
+    private var input: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text("Text to type").font(.headline)
+                Spacer()
+                Button("Paste Clipboard", action: model.pasteClipboard).controlSize(.small).disabled(model.isRunning)
+            }
+            TextEditor(text: $model.text)
+                .font(.system(.body, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(7)
+                .background(.primary.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(.primary.opacity(0.14)))
+                .frame(height: 125)
+                .disabled(model.isRunning)
+        }
+    }
+
+    private var settings: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Toggle("Keep typing if focus changes", isOn: $model.continueAfterFocusChange)
+            Toggle("Use translucent glass", isOn: $model.usesGlass)
+            slider(label: "Focus delay", value: $model.countdownSeconds, range: 0...10, valueText: "\(Int(model.countdownSeconds)) s")
+            slider(label: "Key delay", value: $model.delayMilliseconds, range: 1...200, valueText: "\(Int(model.delayMilliseconds)) ms")
+            slider(label: "Window opacity", value: $model.windowOpacity, range: 0.25...1, valueText: "\(Int(model.windowOpacity * 100))%")
+        }
+        .font(.subheadline)
+    }
+
+    private func slider(label: String, value: Binding<Double>, range: ClosedRange<Double>, valueText: String) -> some View {
+        VStack(spacing: 3) {
+            HStack { Text(label); Spacer(); Text(valueText).foregroundStyle(.secondary).monospacedDigit() }
+            Slider(value: value, in: range)
+        }
+    }
+
+    private var status: some View {
+        Text(model.status)
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(model.isRunning ? .orange : .secondary)
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
+            .padding(.horizontal, 8)
+            .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityLabel("Status: \(model.status)")
+    }
+
+    private var controls: some View {
+        VStack(spacing: 8) {
+            Button(model.isRunning ? "Typing…" : "Execute Input (\(Int(model.countdownSeconds)) s delay)", action: model.start)
+                .buttonStyle(.borderedProminent).tint(.green).frame(maxWidth: .infinity).disabled(!model.canStart)
+            HStack {
+                Button(model.isPaused ? "Resume" : "Pause", action: model.togglePause).frame(maxWidth: .infinity).disabled(!model.isRunning)
+                Button("Cancel", role: .destructive, action: model.cancel).frame(maxWidth: .infinity).disabled(!model.isRunning)
+            }
+        }
+    }
+}
+
+struct WindowBackdrop: NSViewRepresentable {
+    let usesGlass: Bool
+
+    func makeNSView(context: Context) -> NSVisualEffectView { makeView() }
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.state = usesGlass ? .active : .inactive
+        view.material = usesGlass ? .hudWindow : .windowBackground
+        view.blendingMode = .behindWindow
+    }
+    private func makeView() -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.blendingMode = .behindWindow
+        view.material = usesGlass ? .hudWindow : .windowBackground
+        view.state = usesGlass ? .active : .inactive
+        return view
+    }
+}

@@ -1,11 +1,11 @@
-# HLtxtTTswft2.0
+# HLtxtTTswft2.2
 
 A native macOS accessibility utility that keeps a compact text-input window above normal application windows, then types the prepared text after a configurable two-to-ten-second focus delay.
 
 ## Run
 
 ```sh
-swift run HLtxtTT
+swift run HLtxtTTswft2.2
 ```
 
 The first execution requests **Accessibility** permission. Enable it in **System Settings → Privacy & Security → Accessibility**, then relaunch if needed. macOS may require a signed app bundle for the permission to persist between builds; the source is intentionally packaged as a Swift Package for easy inspection and iteration.

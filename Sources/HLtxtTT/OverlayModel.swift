@@ -14,6 +14,7 @@ final class OverlayModel: ObservableObject {
     @Published private(set) var phase: Phase = .ready
     @Published private(set) var status = "Ready — paste or drag text into the field."
     @Published private(set) var inputHistory: [String]
+    @Published private(set) var inputSelectionRequest = UUID()
 
     enum AppearanceChoice: String, CaseIterable, Identifiable {
         case system = "System", light = "Light", dark = "Dark"
@@ -29,7 +30,7 @@ final class OverlayModel: ObservableObject {
     private var typingTask: Task<Void, Never>?
 
     init() {
-        inputHistory = UserDefaults.standard.stringArray(forKey: "HLtxtTTswft2.inputHistory") ?? []
+        inputHistory = UserDefaults.standard.stringArray(forKey: "HLtxtTTswft22.inputHistory") ?? []
     }
 
     func attach(window: NSWindow) {
@@ -57,13 +58,26 @@ final class OverlayModel: ObservableObject {
             return
         }
         text = value
+        inputSelectionRequest = UUID()
         status = "Loaded \(value.count) characters from the clipboard."
     }
 
     func selectHistory(_ value: String) {
         guard !isRunning else { return }
         text = value
+        inputSelectionRequest = UUID()
         status = "Loaded an item from input history."
+    }
+
+    func clearText() {
+        guard !isRunning else { return }
+        guard !text.isEmpty else {
+            status = "Text to type is already clear."
+            return
+        }
+        text = ""
+        inputSelectionRequest = UUID()
+        status = "Text to type cleared."
     }
 
     func historyTitle(for value: String) -> String {
@@ -149,10 +163,30 @@ final class OverlayModel: ObservableObject {
         inputHistory.removeAll { $0 == value }
         inputHistory.insert(value, at: 0)
         inputHistory = Array(inputHistory.prefix(3))
-        UserDefaults.standard.set(inputHistory, forKey: "HLtxtTTswft2.inputHistory")
+        UserDefaults.standard.set(inputHistory, forKey: "HLtxtTTswft22.inputHistory")
     }
 
     private func post(_ character: Character, source: CGEventSource) {
+        // Tab and Return are controls rather than text in AppKit. Send those
+        // physical keys, but use Unicode events for every printable character
+        // so punctuation, symbols, accents, emoji, and non-US layouts survive.
+        switch character {
+        case "\n", "\r":
+            postKey(0x24, isDown: true, source: source)
+            postKey(0x24, isDown: false, source: source)
+            return
+        case "\t":
+            postKey(0x30, isDown: true, source: source)
+            postKey(0x30, isDown: false, source: source)
+            return
+        default:
+            break
+        }
+
+        // Standard keyboard characters are sent as separate physical
+        // key-down/key-up events, the form expected by browsers and many
+        // browser-hosted virtual machines. Unicode events below are reserved
+        // for characters that have no equivalent key on a US keyboard.
         if let stroke = ANSIKeyStroke(character) {
             if stroke.requiresShift { postKey(0x38, isDown: true, source: source) }
             postKey(stroke.keyCode, isDown: true, source: source)
@@ -199,14 +233,14 @@ private struct ANSIKeyStroke {
             "u": (0x20, false), "v": (0x09, false), "w": (0x0D, false), "x": (0x07, false),
             "y": (0x10, false), "z": (0x06, false),
             "0": (0x1D, false), "1": (0x12, false), "2": (0x13, false), "3": (0x14, false),
-            "4": (0x15, false), "5": (0x17, false), "6": (0x16, false), "7": (0x18, false),
-            "8": (0x19, false), "9": (0x1A, false), "-": (0x1B, false), "=": (0x18, false),
+            "4": (0x15, false), "5": (0x17, false), "6": (0x16, false), "7": (0x1A, false),
+            "8": (0x1C, false), "9": (0x19, false), "-": (0x1B, false), "=": (0x18, false),
             "[": (0x21, false), "]": (0x1E, false), "\\": (0x2A, false), ";": (0x29, false),
             "'": (0x27, false), "`": (0x32, false), ",": (0x2B, false), ".": (0x2F, false),
             "/": (0x2C, false), " ": (0x31, false), "\t": (0x30, false), "\n": (0x24, false),
             "~": (0x32, true), "!": (0x12, true), "@": (0x13, true), "#": (0x14, true),
-            "$": (0x15, true), "%": (0x17, true), "^": (0x16, true), "&": (0x18, true),
-            "*": (0x19, true), "(": (0x1A, true), ")": (0x1D, true), "_": (0x1B, true),
+            "$": (0x15, true), "%": (0x17, true), "^": (0x16, true), "&": (0x1A, true),
+            "*": (0x1C, true), "(": (0x19, true), ")": (0x1D, true), "_": (0x1B, true),
             "+": (0x18, true), "{": (0x21, true), "}": (0x1E, true), "|": (0x2A, true),
             ":": (0x29, true), "\"": (0x27, true), "<": (0x2B, true), ">": (0x2F, true),
             "?": (0x2C, true)

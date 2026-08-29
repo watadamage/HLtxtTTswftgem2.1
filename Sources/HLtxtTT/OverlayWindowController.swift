@@ -1,20 +1,30 @@
 import AppKit
 import SwiftUI
 
+private final class InteractiveOverlayWindow: NSWindow {
+    // A status-level utility window must explicitly be allowed to become key,
+    // otherwise embedded AppKit controls can display text but not accept a
+    // selection, caret, keyboard input, or mouse editing gestures.
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 final class OverlayWindowController: NSWindowController, NSWindowDelegate {
     init(model: OverlayModel) {
         let frame = NSRect(x: 120, y: 120, width: 440, height: 650)
-        let window = NSWindow(
+        let window = InteractiveOverlayWindow(
             contentRect: frame,
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
 
-        window.title = "HLtxtTTswft2.0"
+        window.title = "HLtxtTTswft2.2"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
+        // Keep the document editor's empty areas available for normal mouse
+        // selection and dragging rather than treating them as window drags.
+        window.isMovableByWindowBackground = false
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = true
@@ -24,7 +34,7 @@ final class OverlayWindowController: NSWindowController, NSWindowDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.hidesOnDeactivate = false
         window.minSize = NSSize(width: 380, height: 570)
-        window.setFrameAutosaveName("HLtxtTTswft2Overlay")
+        window.setFrameAutosaveName("HLtxtTTswft22Overlay")
 
         model.attach(window: window)
         window.contentView = NSHostingView(rootView: OverlayView(model: model))

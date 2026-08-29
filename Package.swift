@@ -2,8 +2,8 @@
 import PackageDescription
 
 let package = Package(
-    name: "HLtxtTT",
+    name: "HLtxtTTswft2.2",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "HLtxtTT", targets: ["HLtxtTT"])],
+    products: [.executable(name: "HLtxtTTswft2.2", targets: ["HLtxtTT"])],
     targets: [.executableTarget(name: "HLtxtTT")]
 )

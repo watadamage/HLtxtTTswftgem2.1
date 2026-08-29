@@ -10,6 +10,8 @@ struct OverlayView: View {
     var body: some View {
         ZStack {
             WindowBackdrop(usesGlass: model.usesGlass)
+            DraggableWindowBackground()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             VStack(alignment: .leading, spacing: 14) {
                 header
                 input
@@ -26,8 +28,11 @@ struct OverlayView: View {
 
     private var header: some View {
         HStack {
+            WindowDragHandle()
+                .frame(width: 28, height: 28)
+                .accessibilityLabel("Drag to move window")
             VStack(alignment: .leading, spacing: 2) {
-                Text("HLtxtTTswft2.0").font(.system(size: 18, weight: .bold, design: .rounded))
+                Text("HLtxtTTswft2.2").font(.system(size: 18, weight: .bold, design: .rounded))
                 Text("On-screen accessibility input utility").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -43,6 +48,9 @@ struct OverlayView: View {
                 Text("Text to type").font(.headline)
                 Spacer()
                 Button("Paste Clipboard", action: model.pasteClipboard).controlSize(.small).disabled(model.isRunning)
+                Button("Clear", role: .destructive, action: model.clearText)
+                    .controlSize(.small)
+                    .disabled(model.isRunning || model.text.isEmpty)
                 Menu {
                     if model.inputHistory.isEmpty {
                         Text("No previous inputs")
@@ -58,9 +66,7 @@ struct OverlayView: View {
                 .disabled(model.isRunning)
                 .accessibilityLabel("Last three inputs")
             }
-            TextEditor(text: $model.text)
-                .font(.system(.body, design: .monospaced))
-                .scrollContentBackground(.hidden)
+            SelectableTextEditor(text: $model.text, selectionRequest: model.inputSelectionRequest)
                 .padding(7)
                 .background(.primary.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(.primary.opacity(0.14)))
@@ -122,6 +128,138 @@ struct OverlayView: View {
             .padding(.top, 4)
         }
         .font(.subheadline.weight(.medium))
+    }
+}
+
+/// A narrow native drag region moves the status-level window without making
+/// the document editor or controls behave like a draggable background.
+struct WindowDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragHandleView { DragHandleView() }
+    func updateNSView(_ view: DragHandleView, context: Context) {}
+
+    final class DragHandleView: NSView {
+        override var acceptsFirstResponder: Bool { false }
+
+        override func draw(_ dirtyRect: NSRect) {
+            NSColor.secondaryLabelColor.withAlphaComponent(0.45).setFill()
+            let dotSize: CGFloat = 3
+            let spacing: CGFloat = 5
+            let startX = (bounds.width - (dotSize * 2 + spacing)) / 2
+            let startY = (bounds.height - (dotSize * 3 + spacing * 2)) / 2
+            for row in 0..<3 {
+                for column in 0..<2 {
+                    let rect = NSRect(
+                        x: startX + CGFloat(column) * (dotSize + spacing),
+                        y: startY + CGFloat(row) * (dotSize + spacing),
+                        width: dotSize,
+                        height: dotSize
+                    )
+                    NSBezierPath(ovalIn: rect).fill()
+                }
+            }
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
+        }
+    }
+}
+
+struct DraggableWindowBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> BackgroundDragView { BackgroundDragView() }
+    func updateNSView(_ view: BackgroundDragView, context: Context) {}
+
+    final class BackgroundDragView: NSView {
+        override var acceptsFirstResponder: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
+        }
+    }
+}
+
+/// An AppKit text editor keeps macOS 14 compatibility while allowing pasted
+/// and restored values to be selected programmatically.
+struct SelectableTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    let selectionRequest: UUID
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+
+        let textView = EditableTextView()
+        textView.delegate = context.coordinator
+        textView.string = text
+        textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.isFieldEditor = false
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.drawsBackground = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.frame = NSRect(origin: .zero, size: NSSize(width: 1, height: 1))
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: scrollView.contentSize.width,
+            height: .greatestFiniteMagnitude
+        )
+        textView.textContainerInset = NSSize(width: 3, height: 3)
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.parent = self
+        if textView.string != text {
+            textView.string = text
+        }
+        guard context.coordinator.lastSelectionRequest != selectionRequest else { return }
+        context.coordinator.lastSelectionRequest = selectionRequest
+        textView.setSelectedRange(NSRange(location: 0, length: (text as NSString).length))
+        DispatchQueue.main.async {
+            textView.window?.makeFirstResponder(textView)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: SelectableTextEditor
+        var lastSelectionRequest: UUID?
+
+        init(parent: SelectableTextEditor) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+    }
+
+    final class EditableTextView: NSTextView {
+        override var acceptsFirstResponder: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.makeKey()
+            window?.makeFirstResponder(self)
+            super.mouseDown(with: event)
+        }
     }
 }
 
